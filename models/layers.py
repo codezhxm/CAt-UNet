@@ -101,3 +101,172 @@ class CBAM(nn.Module):
         out = self.channel_att(x)
         out = self.spatial_att(out)
         return out
+
+
+class CSPABN(nn.Module):   ## Channel and space parallel attention
+    def __init__(self, channel, reduction=16):
+        super(CSPABN, self).__init__()
+        #self.avg_pool = nn.Ad(1)
+        self.pool_h = nn.AdaptiveMaxPool2d((None, 1))
+        self.pool_w = nn.AdaptiveMaxPool2d((1, None))
+        self.pool_c = nn.AdaptiveAvgPool2d(1)
+        self.fc = nn.Sequential(
+            #nn.Linear(channel, channel // reduction, bias=False),
+            nn.Conv2d(channel, channel // reduction,kernel_size=1,stride=1, bias=False),
+            # nn.BatchNorm2d(channel // reduction),
+            nn.ReLU(inplace=True),
+            nn.Conv2d( channel // reduction,channel, kernel_size=1, stride=1, bias=False),
+            # nn.Linear(channel // reduction, channel, bias=False),
+            nn.Sigmoid()
+        )
+    def forward(self, x):
+        #b, c, _, _ = x.size()
+        #y = self.avg_pool(x).view(b, c)
+        x_h = self.pool_h(x)
+        x_w = self.pool_w(x)
+        #x_hw= x_w+x_h
+        x_c = self.pool_c(x)
+        x_h = self.fc(x_h)
+        x_w = self.fc(x_w)
+        x_c = self.fc(x_c)
+        x=x * x_h * x_w * x_c
+        # print(x.shape)
+        return x  #x * x_h * x_w * x_c
+
+
+class CSPA(nn.Module):   ## Channel and space parallel attention
+    def __init__(self, channel, reduction=16):
+        super(CSPA, self).__init__()
+        #self.avg_pool = nn.Ad(1)
+        self.pool_h = nn.AdaptiveMaxPool2d((None, 1))
+        self.pool_w = nn.AdaptiveMaxPool2d((1, None))
+        self.pool_c = nn.AdaptiveAvgPool2d(1)
+        self.fc = nn.Sequential(
+            #nn.Linear(channel, channel // reduction, bias=False),
+            nn.Conv2d(channel, channel // reduction,kernel_size=1,stride=1, bias=False),
+            nn.BatchNorm2d(channel // reduction),
+            nn.ReLU(inplace=True),
+            nn.Conv2d( channel // reduction,channel, kernel_size=1, stride=1, bias=False),
+            # nn.Linear(channel // reduction, channel, bias=False),
+            nn.Sigmoid()
+        )
+    def forward(self, x):
+        #b, c, _, _ = x.size()
+        #y = self.avg_pool(x).view(b, c)
+        x_h = self.pool_h(x)
+        x_w = self.pool_w(x)
+        #x_hw= x_w+x_h
+        x_c = self.pool_c(x)
+        x_h = self.fc(x_h)
+        x_w = self.fc(x_w)
+        x_c = self.fc(x_c)
+        x=x * x_h * x_w * x_c
+        # print(x.shape)
+        return x  #x * x_h * x_w * x_c
+
+class ConvLSTMCell(nn.Module):
+
+    def __init__(self, input_dim, hidden_dim, input_size, kernel_size, bias=False):
+        """
+        Initialize ConvLSTM cell.
+
+        Parameters
+        ----------
+        input_size: (int, int)
+            Height and width of input tensor as (height, width).
+        input_dim: int
+            Number of channels of input tensor.
+        hidden_dim: int
+            Number of channels of hidden state.
+        kernel_size: (int, int)
+            Size of the convolutional kernel.
+        bias: bool
+            Whether or not to add the bias.
+        """
+
+        super(ConvLSTMCell, self).__init__()
+
+        self.width = input_size
+        self.input_dim = input_dim
+        self.hidden_dim = hidden_dim
+
+        self.kernel_size = kernel_size
+        self.padding = 1, 1
+        self.bias = bias
+
+        self.conv = nn.Conv2d(in_channels=self.input_dim + self.hidden_dim,
+                              out_channels=4 * self.hidden_dim,
+                              kernel_size=self.kernel_size,
+                              padding=self.padding,
+                              bias=self.bias)
+
+    def forward(self, input_tensor, h_cur, c_cur):
+        combined = torch.cat([input_tensor, h_cur], dim=1)  # concatenate along channel axis
+
+        combined_conv = self.conv(combined)
+        cc_i, cc_f, cc_o, cc_g = torch.split(combined_conv, self.hidden_dim, dim=1)
+        i = torch.sigmoid(cc_i)
+        f = torch.sigmoid(cc_f)
+        o = torch.sigmoid(cc_o)
+        g = torch.tanh(cc_g)
+
+        c_next = f * c_cur + i * g
+        h_next = o * torch.tanh(c_next)
+
+        return h_next, c_next
+
+
+class RNN(nn.Module):
+    def __init__(self, num_hidden, frame_channel, width):
+        super(RNN, self).__init__()
+
+        self.frame_channel = frame_channel
+        self.num_layers = len(num_hidden)
+        self.num_hidden = num_hidden
+        self.device = 'cuda'
+        self.height = width
+        self.width = width
+        cell_list = []
+
+        for i in range(self.num_layers):
+            in_channel = self.frame_channel if i == 0 else num_hidden[i - 1]
+            cell_list.append(
+                ConvLSTMCell(in_channel, num_hidden[i], self.width, 3,
+                                       1)
+            )
+        self.cell_list = nn.ModuleList(cell_list)
+
+    def forward(self, frames_tensor):
+        # [batch, length, height, width, channel] -> [batch, length, channel, height, width]
+        # frames = frames_tensor.permute(0, 1, 4, 2, 3).contiguous()
+        # mask_true = mask_true.permute(0, 1, 4, 2, 3).contiguous()
+        frames = frames_tensor
+        # frames = torch.unsqueeze(frames_tensor,dim=2)
+        batch = frames.shape[0]
+        next_frames = []
+        h_t = []
+        c_t = []
+
+        for i in range(self.num_layers):
+            zeros = torch.zeros([batch, self.num_hidden[i], self.height, self.width]).to(self.device)
+            h_t.append(zeros)
+            c_t.append(zeros)
+
+        memory = torch.zeros([batch, self.num_hidden[0], self.height, self.width]).to(self.device)
+
+        for t in range(12):
+            # reverse schedule sampling
+            net = frames[:, t]
+            h_t[0], c_t[0]= self.cell_list[0](net, h_t[0], c_t[0])
+
+            for i in range(1, self.num_layers):
+                h_t[i], c_t[i] = self.cell_list[i](h_t[i - 1], h_t[i], c_t[i])
+
+            # x_gen = self.conv_last(h_t[self.num_layers - 1])
+            next_frames.append(h_t[self.num_layers - 1])
+
+        # [length, batch, channel, height, width] -> [batch, length, height, width, channel]
+        next_frames = torch.stack(next_frames, dim=0).permute(1, 0, 2, 3, 4).contiguous()
+        # next_frames = torch.stack(next_frames, dim=0)
+        next_frames = torch.squeeze(next_frames,dim=1)
+        return next_frames
