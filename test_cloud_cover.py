@@ -11,9 +11,9 @@ def get_model_class(model_file):
     if "SmaAt_UNet_cloud" in model_file:
         model_name = "SmaAt_UNet_cloud"
         model = models.SmaAt_UNet_cloud
-    elif "SAR_UNet_cloud" in model_file:
-        model_name = "SAR_UNet_cloud"
-        model = models.SAR_UNet_cloud
+    elif "CAtUnet" in model_file:
+        model_name = "CAtUnet"
+        model = models.CAtUnet
     elif "UNet" in model_file:
         model_name = "UNet"
         model = models.UNet
