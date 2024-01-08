@@ -7,14 +7,17 @@ import torchsummary
 import os
 
 def train_cloud_cover(hparams):
-    if hparams['model'] == "SAR_UNet_cloud":
-        net = models.SAR_UNet_cloud(hparams=hparams)
+    if hparams['model'] == "UNet_cloud":
+        net = models.UNet_cloud(hparams=hparams)
     elif hparams['model'] == "SmaAt_UNet_cloud":
         net = models.SmaAt_UNet_cloud(hparams=hparams)
+    elif hparams['model'] == "CAtUnet":
+        net = models.CAtUnet(hparams=hparams).to(device)
+    
     else:
         raise NotImplementedError(f"Model '{hparams['model']}' not implemented")
 
-    torchsummary.summary(net, (hparams['in_channels'], 256, 256), device="cpu")
+    torchsummary.summary(net, (hparams['in_channels'], 256, 256), device="cuda")
     net = net.to(device)
     default_root_dir = ""
 
@@ -50,7 +53,7 @@ if __name__ == "__main__":
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     hparams = {
         'device':device,
-        'model': 'SAR_UNet_cloud',
+        'model': 'CAtUnet',
         'out_channels': 6,
         'in_channels': 4,
         "batch_size": 6,
