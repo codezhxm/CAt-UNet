@@ -8,7 +8,7 @@ import os
 
 
 def train_regression(hparams):
-    if hparams['model'] == "SAR_UNet_precip":
+    if hparams['model'] == "CAt_UNet_precip":
         net = models.SAR_UNet_precip(hparams=hparams)
     elif hparams['model'] == "SmaAt_UNet_precip":
         net = models.SmaAt_UNet_precip(hparams=hparams)
@@ -55,7 +55,7 @@ if __name__ == "__main__":
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     hparams = {
         'device': device,
-        'model': 'SAR_UNet_precip',
+        'model': 'CAt_UNet_precip',
         'out_channels': 1,
         'in_channels': 12,  # or 6 or 18 for more or less input data
         "batch_size": 6,
