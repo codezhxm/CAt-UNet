@@ -13,8 +13,8 @@ def get_model_class(model_file):
         model_name = "SmaAt_UNet_precip"
         model = models.SmaAt_UNet_precip
     elif "SAR_UNet_precip" in model_file:
-        model_name = "SAR_UNet_precip"
-        model = models.SAR_UNet_precip
+        model_name = "CAt_UNet_precip"
+        model = models.CAt_UNet_precip
     elif "UNet" in model_file:
         model_name = "UNet_precip"
         model = models.UNet_precip
